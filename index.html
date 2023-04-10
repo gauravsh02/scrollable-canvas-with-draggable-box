@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scrollable canvas with draggable box POC</title>
+    <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden
+        }
+        #parent {
+            width: calc(100% - 40px);
+            height:calc(100% - 150px);
+            margin-left: 20px;
+            margin-top: 10px;
+            border: 1px solid #000;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="parent">
+        <canvas id="canvas"></canvas>
+    </div>
+    <div id="mouse-position">
+
+    </div>
+    <div>
+        <input type="file" id="image-input">
+    </div>
+</body>
+<script>
+    var file, fr;
+    var img, imageWidth, imageHeight;
+    var canvas, ctx;
+    var canvasOffset, offsetX, offsetY;
+    var boxArray = [];
+    var selectedIndex = -1;
+
+    var mousePositionEle = document.getElementById('mouse-position');
+
+    document.getElementById('image-input').addEventListener('change', function(e) {
+        if (typeof window.FileReader !== 'function') {
+            write("The file API isn't supported on this browser yet.");
+            return;
+        }
+
+        if (e.target.files[0]) {
+            file = e.target.files[0];
+            fr = new FileReader();
+            fr.onload = function(){
+                img = new Image();
+                img.onload = renderCanvas
+                img.src = fr.result;
+            };
+            fr.readAsDataURL(file);
+        }
+    });
+
+    function renderCanvas() {
+        let windowWidth = window.innerWidth;
+        let windowHeight = window.innerHeight;
+        
+        imageWidth = img.width;
+        imageHeight = img.height;
+
+        canvas = document.getElementById("canvas"),
+        ctx = canvas.getContext("2d");
+
+        canvas.width = imageWidth;
+        canvas.height = imageHeight;
+
+        // canvasOffset = canvas.offset();
+        // offsetX = canvasOffset.left;
+        // offsetY = canvasOffset.top;
+        var offsetObj = getOffset(canvas);
+        offsetX = offsetObj.left;
+        offsetY = offsetObj.top;
+
+        ctx.drawImage(img, 0, 0, imageWidth, imageHeight, 0, 0, imageWidth, imageHeight);
+
+        // ############################
+
+        // boxArray.push({ txt: 'This is a line', font: 'Arial', x: 0, y: 0, w: 60, h: 20, angle: undefined});
+        // boxArray.push({ txt: 'Another line here', font: 'Arial', x: 30, y: 30, w: 160, h: 40, angle: 0.1});
+        boxArray.push({ txt: 'The Last line', font: 'Arial', x: 2, y: 82, w: 150, h: 20, angle: undefined});
+        // boxArray.push({ txt: '! Now with an angle !', font: 'Arial', x: 42, y: 190, w: 120, h: 30, angle: -Math.PI/12});
+
+        canvas.addEventListener('mousedown', function (e) {
+            handleMouseDown(e);
+        });
+        canvas.addEventListener('mousemove', function (e) {
+            handleMouseMove(e);
+        });
+        canvas.addEventListener('mouseup', function (e) {
+            handleMouseUp(e);
+        });
+        canvas.addEventListener('mouseout', function (e) {
+            handleMouseOut(e);
+        });
+
+        // canvas.onscroll=function(e){ getOffset(canvas); }
+        // canvas.onresize=function(e){ getOffset(canvas); }
+
+        canvas.addEventListener('wheel',function(event){
+            updateOffset();
+        }, false);
+
+        draw();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, imageWidth, imageHeight);
+        ctx.drawImage(img, 0, 0, imageWidth, imageHeight, 0, 0, imageWidth, imageHeight);
+        boxArray.forEach((box) => {
+            drawTextInBox(box, box.txt, box.font, box.x, box.y, box.w, box.h, box.angle)
+        });
+    }
+
+    function drawTextInBox(box, txt, font, x, y, w, h, angle) {
+        // angle = angle || 0;
+        var fontHeight = 20;
+        var hMargin = 4;
+        // ctx.font = fontHeight + 'px ' + font;
+        // ctx.textAlign = 'left';
+        // ctx.textBaseline = 'top';
+        // var txtWidth = ctx.measureText(txt).width + 2 * hMargin;
+
+        // box.height = fontHeight;
+        // box.width = txtWidth;
+
+        // ctx.save();
+        // ctx.translate(x+w/2, y);
+        // ctx.rotate(angle);
+        // ctx.strokeRect(-w/2, 0, w, h);
+        // ctx.scale(w / txtWidth, h / fontHeight);
+        // ctx.translate(hMargin, 0)
+        // ctx.fillText(txt, -txtWidth/2, 0);
+        // ctx.restore();
+
+        
+
+        ctx.font = fontHeight + 'px ' + font;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        
+        ctx.save();
+
+        let rectangle = new Path2D();
+        rectangle.rect(x, y, w, h);
+        ctx.stroke(rectangle);
+        ctx.fillText(txt, x, y);
+
+        rectangle.fillStyle = "rgb(200, 200, 200)";
+        ctx.fill();
+
+        ctx.restore();
+
+        box.path = rectangle;
+    }
+
+    function boxHitTest(x, y, boxIndex) {
+        var box = boxArray[boxIndex];
+        // console.log(
+        //     {
+        //         "1 value" : (x >= box.x && x <= box.x + box.width && y >= box.y - box.height && y <= box.y),
+        //         "2 x" : x,
+        //         "3 box.x": box.x,
+        //         "4 box.width": box.width,
+        //         "5 y": y,
+        //         "6 box.y": box.y,
+        //         "7 box.height": box.height,
+        //         "8 x >= box.x" : x >= box.x,
+        //         "9 x <= box.x + box.width" : x <= box.x + box.width,
+        //         "10 y >= box.y - box.height" : y >= box.y - box.height,
+        //         "11 y <= box.y" : y <= box.y
+        //     }
+        // );
+
+        // return (x >= box.x && x <= box.x + box.width && y >= box.y - box.height && y <= box.y);
+
+        console.log(ctx.isPointInPath(box.path, x, y));
+        return ctx.isPointInPath(box.path, x, y);
+    }
+
+    function handleMouseMove(e) {
+        mousePositionEle.innerHTML = " X : "+e.clientX+" Y :"+e.clientY;
+        if (selectedIndex < 0) {
+            return;
+        }
+        console.log("Move Element : "+selectedIndex);
+        e.preventDefault();
+        mouseX = parseInt(e.clientX - offsetX);
+        mouseY = parseInt(e.clientY - offsetY);
+
+        // Put your mousemove stuff here
+        var dx = mouseX - startX;
+        var dy = mouseY - startY;
+        startX = mouseX;
+        startY = mouseY;
+
+        var box = boxArray[selectedIndex];
+        box.x += dx;
+        box.y += dy;
+        draw();
+    }
+
+    function handleMouseDown(e) {
+        e.preventDefault();
+        startX = parseInt(e.clientX - offsetX);
+        startY = parseInt(e.clientY - offsetY);
+        // console.log('called : handleMouseDown : START');
+        for (var i = 0; i < boxArray.length; i++) {
+            if (boxHitTest(startX, startY, i)) {
+                selectedIndex = i;
+                console.log('boxHitTest : true : startX : '+startX+" : startY : "+startY+" : index : "+i);
+            } else {
+                console.log('boxHitTest : false : startX : '+startX+" : startY : "+startY+" : index : "+i);
+            }
+        }
+        // console.log('called : handleMouseDown : END');
+    }
+
+    // done dragging
+    function handleMouseUp(e) {
+        e.preventDefault();
+        selectedIndex = -1;
+
+        console.log(boxArray);
+    }
+    function handleMouseOut(e) {
+        e.preventDefault();
+        selectedIndex = -1;
+    }
+
+    function getOffset(element) {
+        if (!element.getClientRects().length) {
+        return { top: 0, left: 0 };
+        }
+
+        let rect = element.getBoundingClientRect();
+        let win = element.ownerDocument.defaultView;
+        return ({ top: rect.top + win.pageYOffset, left: rect.left + win.pageXOffset });
+    }
+
+    // ##################################
+
+    window.onscroll=function(e){ getOffset(canvas); }
+    window.onresize=function(e){ getOffset(canvas); }
+
+    function updateOffset() {
+        var offsetObj = getOffset(canvas);
+        offsetX = offsetObj.left;
+        offsetY = offsetObj.top;
+    }
+
+</script>
+</html>
